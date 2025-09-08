@@ -1,0 +1,214 @@
+import tkinter as tk
+from tkinter import Canvas, filedialog, messagebox, ttk
+import csv
+import math
+
+class ContractAnalyzer:
+    def __init__(self, master):
+        self.master = master
+        self.master.configure(background="#A8E4A0")
+        self.contracts = [] 
+        self.filtered_contracts = [] 
+        self.current_view = "all"
+        self.canvas = Canvas(master, bg="white")
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.stats_text = tk.Text(master, height=8, width=80)
+        self.stats_text.pack(pady=10)
+        self.stats_text.config(state=tk.DISABLED)
+
+    def load_contracts(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv"), ("Text files", "*.txt")])
+        if file_path:
+            try:
+                self.contracts = []
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    if file_path.endswith('.csv'):
+                        reader = csv.reader(file)
+                        for row_num, row in enumerate(reader, 1):
+                            if len(row) >= 4: 
+                                try:
+                                    contract = {
+                                        'number': row[0].strip(),
+                                        'equipment': row[1].strip(),
+                                        'manager': row[2].strip(),
+                                        'amount': float(row[3].replace(',', '.'))
+                                    }
+                                    self.contracts.append(contract)
+                                except ValueError:
+                                    messagebox.showwarning("Ошибка данных",
+                                                           f"Ошибка в строке {row_num}: неверный формат суммы")
+                            else:
+                                messagebox.showwarning("Ошибка данных",
+                                                       f"Ошибка в строке {row_num}: недостаточно данных")
+                    else:
+                        for line_num, line in enumerate(file, 1):
+                            parts = line.strip().split()
+                            if len(parts) >= 4:
+                                try:
+                                    contract = {
+                                        'number': parts[0],
+                                        'equipment': parts[1],
+                                        'manager': parts[2],
+                                        'amount': float(parts[3].replace(',', '.'))
+                                    }
+                                    self.contracts.append(contract)
+                                except ValueError:
+                                    messagebox.showwarning("Ошибка данных",
+                                                           f"Ошибка в строке {line_num}: неверный формат суммы")
+                if self.contracts:
+                    messagebox.showinfo("Успех", f"Загружено {len(self.contracts)} договоров")
+                    self.show_equipment_segmentation()
+                else:
+                    messagebox.showwarning("Нет данных", "Не удалось загрузить корректные данные")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {str(e)}")
+
+    def show_equipment_segmentation(self):
+        if not self.contracts:
+            messagebox.showwarning("Нет данных", "Сначала загрузите данные договоров")
+            return
+        equipment_stats = {}
+        for contract in self.contracts:
+            eq_type = contract['equipment']
+            if eq_type not in equipment_stats:
+                equipment_stats[eq_type] = {'count': 0, 'total_amount': 0}
+            equipment_stats[eq_type]['count'] += 1
+            equipment_stats[eq_type]['total_amount'] += contract['amount']
+        self.draw_pie_chart(equipment_stats, "Сегментация договоров по видам техники")
+        self.show_stats(equipment_stats, "Вид техники")
+
+    def show_manager_segmentation(self):
+        if not self.contracts:
+            messagebox.showwarning("Нет данных", "Сначала загрузите данные договоров")
+            return
+        manager_stats = {}
+        for contract in self.contracts:
+            manager = contract['manager']
+            if manager not in manager_stats:
+                manager_stats[manager] = {'count': 0, 'total_amount': 0}
+            manager_stats[manager]['count'] += 1
+            manager_stats[manager]['total_amount'] += contract['amount']
+        self.draw_pie_chart(manager_stats, "Сегментация договоров по менеджерам")
+        self.show_stats(manager_stats, "Менеджер")
+
+    def draw_pie_chart(self, data, title):
+        self.canvas.delete("all")
+        if not data:
+            return
+        total_count = sum(stats['count'] for stats in data.values())
+        if total_count == 0:
+            return
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3', '#54A0FF', '#5F27CD']
+        center_x, center_y = 400, 300
+        radius = 200
+        start_angle = 0
+        color_index = 0
+
+        for category, stats in data.items():
+            percentage = (stats['count'] / total_count) * 100
+            angle = 360 * (stats['count'] / total_count)
+
+            end_angle = start_angle + angle
+            self.canvas.create_arc(center_x - radius, center_y - radius,
+                                   center_x + radius, center_y + radius,
+                                   start=start_angle, extent=angle,
+                                   fill=colors[color_index % len(colors)],
+                                   outline="black", width=2)
+
+            mid_angle = math.radians(start_angle + angle / 2)
+            label_x = center_x + (radius + 30) * math.cos(mid_angle)
+            label_y = center_y - (radius + 30) * math.sin(mid_angle)
+
+            label_text = f"{category}\n{stats['count']} дог. ({percentage:.1f}%)"
+            self.canvas.create_text(label_x, label_y, text=label_text,
+                                    font=("Arial", 8), anchor="w" if label_x > center_x else "e")
+            start_angle = end_angle
+            color_index += 1
+        self.canvas.create_text(center_x, 50, text=title,
+                                font=("Arial", 14, "bold"), fill="darkblue")
+
+    def show_stats(self, data, category_name):
+        self.stats_text.config(state=tk.NORMAL)
+        self.stats_text.delete(1.0, tk.END)
+        total_count = sum(stats['count'] for stats in data.values())
+        total_amount = sum(stats['total_amount'] for stats in data.values())
+        self.stats_text.insert(tk.END, f"ОБЩАЯ СТАТИСТИКА:\n")
+        self.stats_text.insert(tk.END, f"Всего договоров: {total_count}\n")
+        self.stats_text.insert(tk.END, f"Общая сумма: {total_amount:,.2f} руб.\n\n")
+        self.stats_text.insert(tk.END, f"ДЕТАЛИЗАЦИЯ ПО {category_name.upper()}:\n")
+        for category, stats in sorted(data.items(), key=lambda x: x[1]['count'], reverse=True):
+            percentage = (stats['count'] / total_count) * 100
+            avg_amount = stats['total_amount'] / stats['count'] if stats['count'] > 0 else 0
+
+            self.stats_text.insert(tk.END,
+                                   f"{category}: {stats['count']} дог. ({percentage:.1f}%), "
+                                   f"Сумма: {stats['total_amount']:,.2f} руб., "
+                                   f"Средний: {avg_amount:,.2f} руб.\n")
+
+        self.stats_text.config(state=tk.DISABLED)
+
+    def save_results(self):
+        if not self.contracts:
+            messagebox.showwarning("Нет данных", "Нет данных для сохранения")
+            return
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv",
+                                                 filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            try:
+                with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(["Номер договора", "Вид техники", "Менеджер", "Сумма"])
+                    for contract in self.contracts:
+                        writer.writerow([
+                            contract['number'],
+                            contract['equipment'],
+                            contract['manager'],
+                            f"{contract['amount']:.2f}"
+                        ])
+                messagebox.showinfo("Успех", "Данные сохранены успешно!")
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {str(e)}")
+
+    def clear_data(self):
+        self.contracts = []
+        self.filtered_contracts = []
+        self.canvas.delete("all")
+        self.stats_text.config(state=tk.NORMAL)
+        self.stats_text.delete(1.0, tk.END)
+        self.stats_text.config(state=tk.DISABLED)
+        messagebox.showinfo("Очистка", "Все данные очищены")
+
+
+class Interface(tk.Frame):
+    def __init__(self, app):
+        super().__init__(app.master)
+        self.app = app
+        self.initUI()
+    def initUI(self):
+        self.pack(fill=tk.X)
+        self.config(background="#A8E4B9")
+        button_frame = tk.Frame(self, bg="#A8E4B9")
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        buttons = [
+            ("Загрузить договоры", self.app.load_contracts),
+            ("Сегментация по технике", self.app.show_equipment_segmentation),
+            ("Сегментация по менеджерам", self.app.show_manager_segmentation),
+            ("Сохранить результаты", self.app.save_results),
+            ("Очистить данные", self.app.clear_data)
+        ]
+        total_columns = len(buttons)
+        for col, (text, command) in enumerate(buttons):
+            btn = tk.Button(button_frame, text=text, command=command,
+                            bg="#4CAF50", fg="white", font=("Arial", 10),
+                            width=20, height=2)
+            btn.grid(row=0, column=col, sticky="ew", padx=4, pady=4)
+        for col in range(total_columns):
+            button_frame.grid_columnconfigure(col, weight=1)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Анализ договоров аренды строительной техники")
+    root.geometry("1200x800")
+    app = ContractAnalyzer(root)
+    interface = Interface(app)
+    root.mainloop()
