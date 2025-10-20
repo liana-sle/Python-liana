@@ -1,0 +1,481 @@
+import pygame
+import sys
+
+pygame.init()
+
+"""константы"""
+WIDTH, HEIGHT = 1000, 700
+ROAD_COLOR = (50, 50, 50)
+SIDEWALK_COLOR = (100, 100, 100)
+GRASS_COLOR = (34, 139, 34)
+CAR_COLORS = [(255, 0, 0), (255, 165, 0), (0, 255, 0), (0, 0, 255)]
+PEDESTRIAN_COLORS = [(255, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 255)]
+BUTTON_COLOR = (200, 200, 200)
+BUTTON_PRESSED_COLOR = (150, 150, 150)
+TEXT_COLOR = (255, 255, 255)
+CROSSWALK_COLOR = (255, 255, 255)
+STOP_LINE_COLOR = (255, 255, 0)
+ROAD_WIDTH = 300
+
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+GRAY = (100, 100, 100)
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Светофор с пешеходным переходом")
+clock = pygame.time.Clock()
+
+font = pygame.font.SysFont('Arial', 24)
+
+def draw_scene():
+    """фон, дорога, тротуары"""
+    screen.fill(GRASS_COLOR)
+    pygame.draw.rect(screen, ROAD_COLOR, (WIDTH // 2 - ROAD_WIDTH // 2, 0, ROAD_WIDTH, HEIGHT))
+
+    sidewalk_width = 100
+    pygame.draw.rect(screen, SIDEWALK_COLOR,
+                     (WIDTH // 2 - ROAD_WIDTH // 2 - sidewalk_width, 0, sidewalk_width, HEIGHT))
+    pygame.draw.rect(screen, SIDEWALK_COLOR,
+                     (WIDTH // 2 + ROAD_WIDTH // 2, 0, sidewalk_width, HEIGHT))
+
+    for i in range(0, HEIGHT, 40):
+        pygame.draw.rect(screen, (255, 255, 255), (WIDTH // 2 - 3, i, 6, 25))
+
+
+def draw_crosswalk():
+    """пешеходный переход"""
+    crosswalk_y = HEIGHT // 2 - 120
+    crosswalk_height = 240
+    crosswalk_width = 200
+
+    for i in range(0, crosswalk_width, 30):
+        pygame.draw.rect(screen, CROSSWALK_COLOR,
+                         (WIDTH // 2 - crosswalk_width // 2 + i,
+                          crosswalk_y + 30,
+                          15, crosswalk_height - 60))
+
+
+def draw_stop_lines():
+    """стоп-линий"""
+    lane_width = ROAD_WIDTH // 2
+
+    pygame.draw.rect(screen, STOP_LINE_COLOR,
+                     (WIDTH // 2 - ROAD_WIDTH // 2, HEIGHT // 2 - 130, lane_width, 10))
+
+    pygame.draw.rect(screen, STOP_LINE_COLOR,
+                     (WIDTH // 2, HEIGHT // 2 + 120, lane_width, 10))
+
+
+def draw_traffic_light(current_state):
+    """светофор для машин и пешеходов"""
+    pygame.draw.rect(screen, (40, 40, 40), (WIDTH // 2 - ROAD_WIDTH // 2 - 60, HEIGHT // 2 - 220, 50, 120))
+
+    # красный сигнал для машин
+    red_color = RED if current_state == "red" else GRAY
+    pygame.draw.circle(screen, red_color, (WIDTH // 2 - ROAD_WIDTH // 2 - 35, HEIGHT // 2 - 190), 15)
+
+    # зеленый сигнал для машин
+    green_color = GREEN if current_state == "green" else GRAY
+    pygame.draw.circle(screen, green_color, (WIDTH // 2 - ROAD_WIDTH // 2 - 35, HEIGHT // 2 - 150), 15)
+
+    # светофор для пешеходов (горизонтальный)
+    pygame.draw.rect(screen, (40, 40, 40), (WIDTH // 2 + ROAD_WIDTH // 2 + 10, HEIGHT // 2 - 170, 120, 50))
+
+    # сигналы для пешеходов
+    ped_red_color = RED if current_state == "green" else GRAY
+    ped_green_color = GREEN if current_state == "red" else GRAY
+
+    # красный человечек (стой)
+    pygame.draw.circle(screen, ped_red_color, (WIDTH // 2 + ROAD_WIDTH // 2 + 40, HEIGHT // 2 - 145), 15)
+    # зеленый человечек (иди)
+    pygame.draw.circle(screen, ped_green_color, (WIDTH // 2 + ROAD_WIDTH // 2 + 90, HEIGHT // 2 - 145), 15)
+
+
+def draw_cars(car_positions_left, car_positions_right, current_state):
+    """машины с двух сторон дороги"""
+    # машины слева (едут вниз)
+    for i, car_y in enumerate(car_positions_left):
+        car_color = CAR_COLORS[i % len(CAR_COLORS)]
+
+        pygame.draw.rect(screen, car_color,
+                         (WIDTH // 2 - ROAD_WIDTH // 4 - 22, car_y, 45, 60))
+        pygame.draw.rect(screen, (200, 200, 255), (WIDTH // 2 - ROAD_WIDTH // 4 - 17, car_y + 35, 35, 20))
+
+    # машины справа (едут вверх)
+    for i, car_y in enumerate(car_positions_right):
+        car_color = CAR_COLORS[(i + 2) % len(CAR_COLORS)]
+
+        pygame.draw.rect(screen, car_color,
+                         (WIDTH // 2 + ROAD_WIDTH // 4 - 22, car_y, 45, 60))
+        pygame.draw.rect(screen, (200, 200, 255), (WIDTH // 2 + ROAD_WIDTH // 4 - 17, car_y + 5, 35, 20))
+
+
+def draw_pedestrians(current_state, movement_progress=0, waiting_for_cars=False):
+    """пешеходы с анимацией движения"""
+    crosswalk_bottom = HEIGHT // 2 + 120
+    left_sidewalk_x = WIDTH // 2 - ROAD_WIDTH // 2 - 20
+    right_sidewalk_x = WIDTH // 2 + ROAD_WIDTH // 2 + 20
+
+    try:
+        draw_pedestrians.flag
+    except AttributeError:
+        draw_pedestrians.flag = 0
+
+    # Если пешеходы ждут, пока машины проедут, отображаем их стоящими
+    if current_state == "red" and waiting_for_cars:
+        # Пешеходы стоят и ждут
+        if draw_pedestrians.flag == 0:
+            group1_x, group2_x = right_sidewalk_x, left_sidewalk_x
+        else:
+            group1_x, group2_x = left_sidewalk_x, right_sidewalk_x
+
+        for i in range(3):
+            pygame.draw.circle(screen, PEDESTRIAN_COLORS[i % len(PEDESTRIAN_COLORS)], (group1_x, crosswalk_bottom - 30 - i * 35), 10)
+        for i in range(2):
+            pygame.draw.circle(screen, PEDESTRIAN_COLORS[(i + 2) % len(PEDESTRIAN_COLORS)], (group2_x, crosswalk_bottom - 150 - i * 35), 10)
+        
+        
+    elif current_state == "red" and not waiting_for_cars:
+        # Пешеходы идут как обычно
+        crosswalk_left = WIDTH // 2 - ROAD_WIDTH // 2 - 20
+        crosswalk_right = WIDTH // 2 + ROAD_WIDTH // 2 + 20
+
+        try:
+            if draw_pedestrians.last_state != "red":
+                draw_pedestrians.start_time = pygame.time.get_ticks()
+                draw_pedestrians.flag = 1 - draw_pedestrians.flag
+        except AttributeError:
+            draw_pedestrians.start_time = pygame.time.get_ticks()
+            draw_pedestrians.flag = 1 - draw_pedestrians.flag
+        
+        draw_pedestrians.last_state = "red"
+
+        distance = movement_progress * (ROAD_WIDTH + 40)
+
+        if draw_pedestrians.flag == 0:# Направления для групп
+            group1_start, group1_dir = crosswalk_left, distance
+            group2_start, group2_dir = crosswalk_right, -distance
+        else:
+            group1_start, group1_dir = crosswalk_right, -distance
+            group2_start, group2_dir = crosswalk_left, distance
+
+        for i in range(3):#Отрисовка движущихся пешеходов
+            ped_x = group1_start + group1_dir
+            ped_y = crosswalk_bottom - 30 - i * 35
+            pygame.draw.circle(screen, PEDESTRIAN_COLORS[i % len(PEDESTRIAN_COLORS)], (int(ped_x), ped_y), 10)
+        
+        for i in range(2):
+            ped_x = group2_start + group2_dir
+            ped_y = crosswalk_bottom - 150 - i * 35
+            pygame.draw.circle(screen, PEDESTRIAN_COLORS[(i + 2) % len(PEDESTRIAN_COLORS)], (int(ped_x), ped_y), 10)
+
+    else:
+        draw_pedestrians.last_state = "green"
+        
+        if draw_pedestrians.flag == 0:#Позиции на тротуарах
+            group1_x, group2_x = right_sidewalk_x, left_sidewalk_x
+        else:
+            group1_x, group2_x = left_sidewalk_x, right_sidewalk_x
+
+        for i in range(3):#Отрисовка стоящих пешеходов
+            pygame.draw.circle(screen, PEDESTRIAN_COLORS[i % len(PEDESTRIAN_COLORS)], (group1_x, crosswalk_bottom - 30 - i * 35), 10)
+        for i in range(2):
+            pygame.draw.circle(screen, PEDESTRIAN_COLORS[(i + 2) % len(PEDESTRIAN_COLORS)], (group2_x, crosswalk_bottom - 150 - i * 35), 10)
+
+def update_car_positions(car_positions_left, car_positions_right, car_speeds_left, car_speeds_right, current_state, button_state, state_start_time, green_timer):
+    STOP_LINE_Y_DOWN = HEIGHT // 2 - 130
+    STOP_LINE_Y_UP = HEIGHT // 2 + 120
+    MAX_SPEED = 3.0
+    ACCEL = 0.05      #ускорение
+    BRAKE = 0.08      #замедление
+    MIN_GAP = 150     #минимальная дистанция между стоящими машинами
+    PREPARE_TIME = 3.0  #за 3 секунды до красного начинаем тормозить
+    TARGET_STOP_DISTANCE = 50  #фиксированное расстояние от стоп-линии для остановки
+    
+    current_time = pygame.time.get_ticks()
+
+    for i in range(len(car_positions_left)): #машины едущие вниз
+        y = car_positions_left[i]
+        speed = car_speeds_left[i]
+
+        crossed_stop_line = y + 60 > STOP_LINE_Y_DOWN
+        distance_to_line = STOP_LINE_Y_DOWN - (y + 60)
+
+        if current_state == "green":
+            elapsed_time = (current_time - state_start_time) // 1000  
+            time_until_red = green_timer - elapsed_time
+            
+            #торможение за 3 секунды до красного только если кнопка нажата
+            if button_state == "pressed" and time_until_red <= PREPARE_TIME and not crossed_stop_line:
+                if distance_to_line > TARGET_STOP_DISTANCE:
+                    #рассчитываем необходимое замедление для точной остановки
+                    required_braking = (speed * speed) / (2 * (distance_to_line - TARGET_STOP_DISTANCE))
+                    speed = max(0, speed - min(BRAKE * 2, required_braking))
+                else:
+                    speed = 0
+            else:
+                if speed < MAX_SPEED:
+                    speed += ACCEL
+
+        elif current_state == "red":
+            if not crossed_stop_line:
+                #на красный стоп
+                if distance_to_line > TARGET_STOP_DISTANCE:
+                    #необходимое замедление для точной остановки на нужном расстоянии
+                    required_braking = (speed * speed) / (2 * (distance_to_line - TARGET_STOP_DISTANCE))
+                    speed = max(0, speed - min(BRAKE * 2, required_braking))
+                else:
+                    speed = 0
+            else:
+                if speed < MAX_SPEED: #уже пересекла линию — продолжает ехать
+                    speed += ACCEL
+
+        if i > 0 and not crossed_stop_line: #дистанция 
+            prev_y = car_positions_left[i - 1]
+            if prev_y - (y + 5) < MIN_GAP:
+                speed = min(speed, car_speeds_left[i - 1] * 0.8)  #плавное снижение скорости
+
+        car_positions_left[i] += speed
+        car_speeds_left[i] = max(0, min(speed, MAX_SPEED))
+
+        if all(y > HEIGHT + 300 for y in car_positions_left):
+            for i in range(len(car_positions_left)):
+                car_positions_left[i] = -400 - i * MIN_GAP
+                car_speeds_left[i] = MAX_SPEED
+
+    for i in range(len(car_positions_right)): #машины, едущие вверх
+        y = car_positions_right[i]
+        speed = car_speeds_right[i]
+
+        crossed_stop_line = y < STOP_LINE_Y_UP
+        distance_to_line = (y - STOP_LINE_Y_UP)
+
+        if current_state == "green":
+            elapsed_time = (current_time - state_start_time) // 1000 
+            time_until_red = green_timer - elapsed_time
+            
+            #торможение за 3 секунды до красного только если кнопка нажата
+            if button_state == "pressed" and time_until_red <= PREPARE_TIME and not crossed_stop_line:
+                if distance_to_line > TARGET_STOP_DISTANCE:
+                    required_braking = (speed * speed) / (2 * (distance_to_line - TARGET_STOP_DISTANCE))
+                    speed = max(0, speed - min(BRAKE * 2, required_braking))
+                else:
+                    speed = 0
+            else:
+                if speed < MAX_SPEED:
+                    speed += ACCEL
+                    
+        elif current_state == "red":
+            if not crossed_stop_line:
+                #на красный стоп
+                if distance_to_line > TARGET_STOP_DISTANCE:
+                    required_braking = (speed * speed) / (2 * (distance_to_line - TARGET_STOP_DISTANCE))
+                    speed = max(0, speed - min(BRAKE * 2, required_braking))
+                else:
+                    speed = 0
+            else:
+                if speed < MAX_SPEED:
+                    speed += ACCEL
+
+        if i > 0 and not crossed_stop_line: #дистанция
+            prev_y = car_positions_right[i - 1]
+            if (y + 60) - prev_y < MIN_GAP:
+                speed = min(speed, car_speeds_right[i - 1] * 0.8) 
+
+        car_positions_right[i] -= speed
+        car_speeds_right[i] = max(0, min(speed, MAX_SPEED))
+
+        if all(y < -300 for y in car_positions_right):
+            for i in range(len(car_positions_right)):
+                car_positions_right[i] = HEIGHT + 400 + i * MIN_GAP
+                car_speeds_right[i] = MAX_SPEED
+
+
+def draw_button(button_state):
+    """кнопка для пешеходов"""
+    button_color = BUTTON_PRESSED_COLOR if button_state == "pressed" else BUTTON_COLOR
+
+    pygame.draw.rect(screen, button_color, (WIDTH // 2 + 150, HEIGHT // 2 + 140, 100, 45))
+    # координата кнопки, как прямоугольный хитбокс
+    pygame.draw.circle(screen, button_color, (WIDTH // 2 + 150, HEIGHT // 2 + 162), 22)
+
+    button_text = font.render("Нажать", True, TEXT_COLOR)
+    screen.blit(button_text, (WIDTH // 2 + 160, HEIGHT // 2 + 148))
+
+
+def draw_timers(current_state, green_timer, red_timer, button_state, last_state_change, waiting_for_cars=False):
+    """таймер и информационный текст"""
+    if current_state == "green":
+        elapsed = (pygame.time.get_ticks() - last_state_change) // 1000
+        remaining = max(0, green_timer - elapsed)
+        timer_text = font.render(f"Зеленый для машин: {remaining}с", True, TEXT_COLOR)
+        ped_text = font.render("Красный для пешеходов", True, RED)
+            
+    elif current_state == "red":
+        elapsed = (pygame.time.get_ticks() - last_state_change) // 1000
+        remaining = max(0, red_timer - elapsed)
+        if waiting_for_cars:
+            timer_text = font.render(f"Красный для машин: {remaining}с (ЖДУТ)", True, (255, 255, 0))
+        else:
+            timer_text = font.render(f"Красный для машин: {remaining}с", True, TEXT_COLOR)
+        ped_text = font.render("Зеленый для пешеходов", True, GREEN)
+
+    screen.blit(timer_text, (20, 20))
+    screen.blit(ped_text, (20, 50))
+
+    button_status = "Нажата" if button_state == "pressed" else "Не нажата"
+    status_text = font.render(f"Кнопка: {button_status}", True, TEXT_COLOR)
+    screen.blit(status_text, (20, 80))
+
+
+def is_button_clicked(pos):
+    """проверка клика по кнопке (для backend)"""
+    button_rect = pygame.Rect(WIDTH // 2 + 150, HEIGHT // 2 + 140, 100, 45)
+    return button_rect.collidepoint(pos)
+
+
+def check_cars_on_crosswalk(car_positions_left, car_positions_right):
+    """Проверка, есть ли машины на пешеходном переходе"""
+    CROSSWALK_TOP = HEIGHT // 2 - 120
+    CROSSWALK_BOTTOM = HEIGHT // 2 + 120
+    
+    # Проверяем машины слева (едут вниз)
+    for car_y in car_positions_left:
+        # Машина считается на переходе, если ее задняя часть выше низа перехода, а передняя часть ниже верха перехода
+        if car_y + 60 > CROSSWALK_TOP and car_y < CROSSWALK_BOTTOM:
+            return True
+    
+    # Проверяем машины справа (едут вверх)
+    for car_y in car_positions_right:
+        # Машина считается на переходе, если ее задняя часть ниже верха перехода, а передняя часть выше низа перехода
+        if car_y < CROSSWALK_BOTTOM and car_y + 60 > CROSSWALK_TOP:
+            return True
+    
+    return False
+
+
+def update_traffic_light_state(current_state, button_state, green_timer, red_timer, last_state_change, car_positions_left, car_positions_right):
+    """Обновление состояния светофора на основе таймеров и нажатия кнопки"""
+    current_time = pygame.time.get_ticks()
+    elapsed = current_time - last_state_change
+    
+    # Проверяем, есть ли машины на пешеходном переходе
+    cars_on_crosswalk = check_cars_on_crosswalk(car_positions_left, car_positions_right)
+    
+    if current_state == "green":
+        # Зеленый для машин
+        if elapsed >= green_timer * 1000:
+            if button_state == "pressed":
+                # Проверяем, есть ли машины на переходе
+                if not cars_on_crosswalk:
+                    # Переключаем на красный если кнопка нажата и машин нет на переходе
+                    current_state = "red"
+                    last_state_change = current_time
+                    button_state = "not_pressed"  # Сбрасываем состояние кнопки           
+    elif current_state == "red":
+        # Красный для машин - пешеходы идут
+        if elapsed >= red_timer * 1000:
+            current_state = "green"
+            last_state_change = current_time
+    
+    return current_state, button_state, last_state_change, cars_on_crosswalk
+
+
+def update_pedestrian_movement(current_state, last_state_change, red_timer, waiting_for_cars):
+    """Обновление движения пешеходов с несколькими переходами за время зеленого"""
+    if current_state == "red" and not waiting_for_cars:
+        elapsed = pygame.time.get_ticks() - last_state_change
+        total_red_time = red_timer * 1000  # общее время красного в миллисекундах
+        
+        # За время красного пешеходы успевают сделать несколько переходов туда-обратно
+        # Каждый полный цикл (туда+обратно) занимает определенное время
+        cycle_time = 4000  # 4 секунды на полный цикл туда-обратно
+        
+        # Вычисляем текущую фазу движения
+        phase = (elapsed % cycle_time) / cycle_time
+        
+        if phase < 0.5:
+            # Первая половина цикла - движение в одном направлении
+            movement_progress = phase * 2  # от 0 до 1
+        else:
+            # Вторая половина цикла - движение в обратном направлении  
+            movement_progress = 2 - phase * 2  # от 1 до 0
+            
+        return movement_progress
+    else:
+        return 0  # Пешеходы стоят
+
+
+def initialize_timers():
+    """Инициализация таймеров"""
+    green_timer = 30  # 13 секунд зеленого для машин
+    red_timer = 10    # 10 секунд красного для машин (зеленого для пешеходов)
+    last_state_change = pygame.time.get_ticks()  # Время последней смены состояния
+    
+    return green_timer, red_timer, last_state_change
+
+
+def draw_pedestrian_timer(current_state, red_timer, last_state_change, waiting_for_cars=False):
+    """Отрисовка таймера для пешеходов"""
+    if current_state == "red":
+        remaining = max(0, red_timer - (pygame.time.get_ticks() - last_state_change) // 1000)
+        if waiting_for_cars:
+            timer_text = font.render(f"Пешеходам: {remaining}с (ЖДУТ)", True, (255, 255, 0))
+        else:
+            timer_text = font.render(f"Пешеходам: {remaining}с", True, TEXT_COLOR)
+        screen.blit(timer_text, (20, 110))
+
+
+if __name__ == "__main__":
+    # Инициализация таймеров
+    green_timer, red_timer, last_state_change = initialize_timers()
+    # Тестовые данные для демонстрации
+    test_current_state = "green"
+    test_button_state = "not_pressed"
+    test_car_positions_left = [100, 0, -90, -180]
+    test_car_positions_right = [600, 750, 880, 1000]
+
+    test_car_speeds_left = [3 for _ in test_car_positions_left]
+    test_car_speeds_right = [3 for _ in test_car_positions_right]
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            if event.type == pygame.MOUSEBUTTONDOWN and test_button_state == "not_pressed":
+                if event.button == 1 and is_button_clicked(pygame.mouse.get_pos()):
+                    test_button_state = "pressed"
+
+        # Проверяем, есть ли машины на пешеходном переходе
+        cars_on_crosswalk = check_cars_on_crosswalk(test_car_positions_left, test_car_positions_right)
+        
+        # Обновление состояния светофора
+        test_current_state, test_button_state, last_state_change, waiting_for_cars = update_traffic_light_state(
+            test_current_state, test_button_state, green_timer, red_timer, last_state_change, 
+            test_car_positions_left, test_car_positions_right
+        )
+        
+        # Обновление движения пешеходов
+        movement_progress = update_pedestrian_movement(test_current_state, last_state_change, red_timer, waiting_for_cars)
+        
+        # Обновление позиций машин
+        update_car_positions(test_car_positions_left, test_car_positions_right, test_car_speeds_left, test_car_speeds_right, test_current_state, test_button_state, last_state_change, green_timer)  
+
+        # Отрисовка
+        draw_scene()
+        draw_crosswalk()
+        draw_stop_lines()
+        draw_traffic_light(test_current_state)
+        draw_cars(test_car_positions_left, test_car_positions_right, test_current_state)
+        draw_pedestrians(test_current_state, movement_progress, waiting_for_cars)
+        draw_button(test_button_state)
+        draw_timers(test_current_state, green_timer, red_timer, test_button_state, last_state_change, waiting_for_cars)
+        draw_pedestrian_timer(test_current_state, red_timer, last_state_change, waiting_for_cars)
+
+        pygame.display.flip()
+        clock.tick(60)
+
+    pygame.quit()
+    sys.exit()
