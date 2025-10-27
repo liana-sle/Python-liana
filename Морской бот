@@ -1,0 +1,263 @@
+import tkinter as tk
+from tkinter import messagebox
+import random
+
+root = tk.Tk()
+root.title("Морской бой")
+root.geometry("800x500")
+root.resizable(False, False)
+matrix = [[0 for i in range(10)] for j in range(10)]
+game_started = False
+
+messagebox.showinfo("Добро пожаловать!",
+                    "Добро пожаловать в игру Морской бой! "
+                    "Расставьте свои корабли тыкая на кнопки на своём поле, "
+                    "затем проверьте расстановку своего поля и поля противника. "
+                    "Успеха!")
+
+def click_kletka(event):
+    cell = event.widget
+    row = cell.row
+    col = cell.col
+    if cell.master.master == pole1_frame:
+        if not game_started:
+            if matrix[row][col] == 0:
+                matrix[row][col] = 1
+                cell.config(bg='brown')
+            else:
+                matrix[row][col] = 0
+                cell.config(bg='lightblue')
+    else:
+        if game_started and cell['bg'] == 'lightblue':
+            player_hod(row, col, cell)
+
+def player_hod(row, col, cell):
+    if bot_matrix[row][col] == 1:
+        cell.config(bg='red')
+        bot_matrix[row][col] = 2
+        messagebox.showinfo("Попадание!", "Вы попали по кораблю противника!")
+        if is_ship_false(bot_matrix, row, col):
+            messagebox.showinfo("Потоплен!", "Вы потопили корабль противника!")
+        if check_game_over(bot_matrix):
+            messagebox.showinfo("Победа!", "Вы победили! Все корабли противника потоплены!")
+            return
+    else:
+        cell.config(bg='green')
+        messagebox.showinfo("Промах", "Вы промахнулись!")
+    bot_hod()
+
+def bot_hod():
+    hod_bot_hod = []
+    for i in range(10):
+        for j in range(10):
+            if lovushka_matrix[i][j] == 1 and matrix[i][j] == 1:
+                hod_bot_hod.append((i, j))
+    if hod_bot_hod:
+        row, col = random.choice(hod_bot_hod)
+    else:
+        row, col = random.randint(0, 9), random.randint(0, 9)
+        while matrix[row][col] == 2:
+            row, col = random.randint(0, 9), random.randint(0, 9)
+    cell = kl1[row][col]
+    if matrix[row][col] == 1:
+        cell.config(bg='red')
+        matrix[row][col] = 2
+        messagebox.showinfo("Попадание!", "Бот попал по вашему кораблю!")
+        if is_ship_false(matrix, row, col):
+            messagebox.showinfo("Потоплен!", "Бот потопил ваш корабль!")
+        if check_game_over(matrix):
+            messagebox.showinfo("Поражение", "Бот победил! Все ваши корабли потоплены!")
+    else:
+        cell.config(bg='green')
+        matrix[row][col] = 3
+        messagebox.showinfo("Промах", "Бот промахнулся!")
+
+def is_ship_false(field, row, col):
+    for i in range(max(0, row - 1), min(10, row + 2)):
+        for j in range(max(0, col - 1), min(10, col + 2)):
+            if field[i][j] == 1:
+                return False
+    return True
+
+def check_game_over(field):
+    for i in range(10):
+        for j in range(10):
+            if field[i][j] == 1:
+                return False
+    return True
+
+def verification():
+    global game_started, lovushka_matrix
+    pr_matrix = [[0 for i in range(12)] for j in range(12)]
+    for i in range(10):
+        for j in range(10):
+            pr_matrix[i + 1][j + 1] = matrix[i][j]
+    for i in range(1, 11):
+        for j in range(1, 11):
+            if pr_matrix[i][j] == 1:
+                if (pr_matrix[i + 1][j + 1] == 1) or (pr_matrix[i + 1][j - 1] == 1):
+                    messagebox.showerror("Ошибка", "Корабли стоят неверно!")
+                    return False
+    time_matrix = [row[:] for row in matrix]
+    ship = {1: 0, 2: 0, 3: 0, 4: 0}
+    lovushka_matrix = [[0 for i in range(10)] for j in range(10)]
+    for i in range(10):
+        for j in range(10):
+            if time_matrix[i][j] == 1:
+                size = 1
+                time_matrix[i][j] = 0
+                lovushka_matrix[i][j] = 1
+                if j < 9 and time_matrix[i][j + 1] == 1:
+                    k = j + 1
+                    while k < 10 and time_matrix[i][k] == 1 and size < 4:
+                        size += 1
+                        time_matrix[i][k] = 0
+                        lovushka_matrix[i][k] = 1
+                        k += 1
+                    if k < 10 and time_matrix[i][k] == 1:
+                        messagebox.showerror("Ошибка", "Найден корабль длиной более 4 клеток!")
+                        return False
+                elif i < 9 and time_matrix[i + 1][j] == 1:
+                    k = i + 1
+                    while k < 10 and time_matrix[k][j] == 1 and size < 4:
+                        size += 1
+                        time_matrix[k][j] = 0
+                        lovushka_matrix[k][j] = 1
+                        k += 1
+                    if k < 10 and time_matrix[k][j] == 1:
+                        messagebox.showerror("Ошибка", "Найден корабль длиной более 4 клеток!")
+                        return False
+                if size in ship:
+                    ship[size] += 1
+                else:
+                    messagebox.showerror("Ошибка", f"Найден корабль недопустимого размера: {size}")
+                    return False
+    if (ship[4] != 1 or ship[3] != 2 or
+            ship[2] != 3 or ship[1] != 4):
+        messagebox.showerror("Ошибка", "Корабли стоят неверно!")
+        return False
+    ust_bot_ships()
+    game_started = True
+    messagebox.showinfo("Успех", "Корабли расставлены правильно! Игра начинается!")
+    return True
+
+def create_pole(container, name):
+    frame = tk.Frame(container, relief=tk.RAISED, bd=2)
+    frame.pack(side=tk.LEFT, padx=20, pady=20)
+    pole_frame = tk.Frame(frame)
+    pole_frame.pack(pady=10)
+    label_pole = tk.Label(frame, text=name, font=("Arial", 12))
+    label_pole.pack(pady=5)
+    klet = []
+    for row in range(10):
+        row_klet = []
+        for col in range(10):
+            kl = tk.Button(pole_frame, width=3, height=1, bg='lightblue', relief=tk.RAISED, bd=1)
+            kl.grid(row=row, column=col, padx=1, pady=1)
+            kl.row = row
+            kl.col = col
+            kl.bind("<Button-1>", click_kletka)
+            row_klet.append(kl)
+        klet.append(row_klet)
+    return frame, klet
+
+main_frame = tk.Frame(root)
+main_frame.pack(expand=True, fill=tk.BOTH)
+pole1_frame, kl1 = create_pole(main_frame, "Ваше поле")
+pole2_frame, kl2 = create_pole(main_frame, "Поле противника")
+
+def random_ships():
+    bot_matrix = [[0 for i in range(10)] for j in range(10)]
+    ships = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
+    for ship in ships:
+        mesto = False
+        result = 0
+        while not mesto and result < 100:
+            naprav = random.randint(0, 1)
+            if naprav == 0:
+                row = random.randint(0, 9)
+                col = random.randint(0, 10 - ship)
+            else:
+                row = random.randint(0, 10 - ship)
+                col = random.randint(0, 9)
+            if pr_mesto_ship(bot_matrix, row, col, ship, naprav):
+                ship_matrix(bot_matrix, row, col, ship, naprav)
+                mesto = True
+            result += 1
+        if not mesto:
+            return random_ships()
+    return bot_matrix
+
+def pr_mesto_ship(matrix, row, col, size, naprav):
+    if naprav == 0:
+        if col + size > 10:
+            return False
+    else:
+        if row + size > 10:
+            return False
+    for i in range(-1, size + 1):
+        for j in range(-1, 2):
+            if naprav == 0:
+                pr_row = row + j
+                pr_col = col + i
+            else:
+                pr_row = row + i
+                pr_col = col + j
+            if 0 <= pr_row < 10 and 0 <= pr_col < 10:
+                if matrix[pr_row][pr_col] == 1:
+                    return False
+    return True
+def ship_matrix(matrix, row, col, size, naprav):
+    for i in range(size):
+        if naprav == 0:
+            matrix[row][col + i] = 1
+        else:
+            matrix[row + i][col] = 1
+
+def ust_bot_ships():
+    global bot_matrix
+    bot_matrix = random_ships()
+
+def show_rull():
+    rull_text = '''
+     ПРАВИЛА ИГРЫ "МОРСКОЙ БОЙ"
+
+    ЦЕЛЬ ИГРЫ:
+    Первым потопить все корабли противника.
+
+    РАССТАНОВКА КОРАБЛЕЙ:
+    • 1 корабль — 4 клетки (четырёхпалубный)
+    • 2 корабля — 3 клетки (трёхпалубные)
+    • 3 корабля — 2 клетки (двухпалубные)
+    • 4 корабля — 1 клетка (однопалубные)
+
+    ПРАВИЛА РАССТАНОВКИ:
+    • Корабли не могут соприкасаться друг с другом (даже по диагонали)
+    • Корабли можно располагать только по горизонтали или вертикали
+    • Корабли не могут выходить за границы поля
+
+    ХОД ИГРЫ:
+    1. Игрок расставляет корабли на своём поле (коричневые клетки)
+    2. Нажимает кнопку "Проверить расстановку"
+    3. Если расстановка правильная - начинается игра
+    4. Первый ход делает игрок
+    5. Игрок кликает по полю противника для выстрела
+    6. Попадание - красная клетка, промах - зелёная клетка
+    7. После хода игрока ходит компьютер
+
+    СИСТЕМА ОБОЗНАЧЕНИЙ:
+    • Коричневый - ваш корабль
+    • Красный - попадание (подбитая часть корабля)
+    • Зелёный - промах
+    • Синий - пустая клетка
+
+    УДАЧИ В ИГРЕ!
+    '''
+    messagebox.showinfo("Правила игры", rull_text)
+
+btn_rull = tk.Button(root, text="Правила игры", command=show_rull, font=("Arial", 12), bg="lightgreen")
+btn_rull.pack(pady=10)
+btn_verify = tk.Button(root, text="Проверить расстановку", command=verification, font=("Arial", 12), bg="lightgreen")
+btn_verify.pack(pady=10)
+
+root.mainloop()
