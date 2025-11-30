@@ -1,0 +1,128 @@
+import tkinter as tk
+from tkinter import messagebox
+
+buttons = []
+matrix = [[0 for i in range(15)] for j in range(15)]
+juk_start = (0,7)
+
+def pole():
+    global buttons
+    buttons = []
+    window = tk.Tk()
+    window.title("Выход из лабиринта")
+    window.geometry("800x600")
+    window.resizable(False, False)
+
+    bot_btn = tk.Button(text="Случайный лабиринт", font=("Veranda", 12),
+                          command=bot_pole)
+    bot_btn.pack(side=tk.LEFT)
+    resh_btn = tk.Button(text="Решить", font=("Veranda", 12),
+                         command=reshenie)
+    resh_btn.pack(side=tk.LEFT)
+    ochist_btn = tk.Button(text="Очистить", font=("Veranda", 12),
+                         command=ochist_pole)
+    ochist_btn.pack(side=tk.LEFT)
+
+    game_frame = tk.Frame(window)
+    game_frame.pack(pady=10)
+
+    for i in range(15):
+        row_buttons = []
+        for j in range(15):
+            if i == juk_start[0] and j == juk_start[1]:
+                button = tk.Button(game_frame, text="", font=("Veranda", 12, "bold"),
+                                   fg="white", bg="black", activebackground="black",
+                                   width=2, height=1, state="disabled")
+            else:
+                button = tk.Button(game_frame, text="", font=("Veranda", 12, "bold"),
+                                   fg="navy", bg="lightblue", activebackground="steelblue",
+                                   width=2, height=1,
+                                   command=lambda row=i, col=j: button_click(row, col))
+            button.grid(row=i, column=j, padx=1, pady=1)
+            row_buttons.append(button)
+        buttons.append(row_buttons)
+    matrix[juk_start[0]][juk_start[1]] = 2
+    return window
+
+def button_click(row, col):
+    global matrix
+
+    if matrix[row][col] == 0:
+        matrix[row][col] = 1
+        buttons[row][col].config(bg="darkblue", activebackground="darkblue")
+    else:
+        matrix[row][col] = 0
+        buttons[row][col].config(bg="lightblue", activebackground="steelblue")
+
+def bot_pole():
+    global matrix
+    matrix_1 = [[1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1],
+        [1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+        [1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+        [1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+        [1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1],
+        [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1]]
+    for i in range(15):
+        for j in range(15):
+            if (i, j) != juk_start:
+                matrix[i][j] = matrix_1[i][j]
+                if matrix[i][j] == 1:
+                    buttons[i][j].config(bg="darkblue", activebackground="darkblue")
+                else:
+                    buttons[i][j].config(bg="lightblue", activebackground="steelblue")
+
+def reshenie():
+    from collections import deque
+    start = juk_start
+    row, col = start
+    hod_juka = deque([start])
+    doroga = [[False for i in range(15)] for j in range(15)]
+    sosedi = [[None for i in range(15)] for j in range(15)]
+    doroga[start[0]][start[1]] = True
+    napravlenie = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+    vihod = None
+    while hod_juka:
+        current_row, current_col = hod_juka.popleft()
+        if (current_row == 0 or current_row == 14 or current_col == 0 or current_col == 14) and (current_row, current_col) != start:
+            vihod = (current_row, current_col)
+            break
+        for dr, dc in napravlenie:
+            new_row, new_col = current_row + dr, current_col + dc
+            if (0 <= new_row < 15 and 0 <= new_col < 15 and not doroga[new_row][new_col] and matrix[new_row][new_col] == 0):
+                doroga[new_row][new_col] = True
+                sosedi[new_row][new_col] = (current_row, current_col)
+                hod_juka.append((new_row, new_col))
+    if vihod:
+        path = []
+        current = vihod
+        while current != start:
+            path.append(current)
+            current = sosedi[current[0]][current[1]]
+        for row, col in path:
+            buttons[row][col].config(bg="green")
+        messagebox.showinfo("Победа", "Путь к выходу найден!")
+    else:
+        messagebox.showinfo("Проигрыш", "Путь к выходу не найден")
+
+def ochist_pole():
+    for i in range(15):
+        for j in range(15):
+            if (i, j) != juk_start:
+                matrix[i][j] = 0
+                buttons[i][j].config(bg="lightblue", activebackground="steelblue")
+
+def start_game():
+    window = pole()
+    window.mainloop()
+
+if __name__ == "__main__":
+    start_game()
