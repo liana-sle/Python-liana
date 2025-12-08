@@ -1,0 +1,9 @@
+def main():
+    print("Интерпретатор Python.")
+    while True:
+        a = input("Введите выражение: ")
+        result = eval(a)
+        print(f"Результат: {result}")
+
+if __name__ == "__main__":
+    main()
